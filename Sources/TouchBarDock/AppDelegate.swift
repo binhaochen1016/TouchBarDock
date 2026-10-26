@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
@@ -7,15 +8,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var observers: [NSObjectProtocol] = []
     private var refreshTimer: Timer?
     private let model = AppModel()
+    private let autoLaunchConfiguredKey = "TouchBarDock.autoLaunchConfigured"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
         startObserving()
+        enableAutoLaunchOnFirstRun()
         controller.present()
 
         // 兜底：部分系统转场（锁屏/全屏切换）会收走模态栏，定时重挂（幂等，不重建不闪）
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.controller.rePresent()
+        }
+    }
+
+    // MARK: - 登录自启动
+
+    private func enableAutoLaunchOnFirstRun() {
+        guard !UserDefaults.standard.bool(forKey: autoLaunchConfiguredKey) else { return }
+        UserDefaults.standard.set(true, forKey: autoLaunchConfiguredKey)
+        setAutoLaunch(true)
+    }
+
+    private func setAutoLaunch(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            // 记录到诊断日志，不打断运行
+            let path = NSHomeDirectory() + "/Library/Logs/TouchBarDock.log"
+            if !FileManager.default.fileExists(atPath: path) {
+                FileManager.default.createFile(atPath: path, contents: nil)
+            }
+            if let handle = FileHandle(forWritingAtPath: path) {
+                let line = "[\(Date())] SMAppService \(enabled ? "register" : "unregister") 失败: \(error)\n"
+                handle.seekToEndOfFile()
+                handle.write(line.data(using: .utf8)!)
+                handle.closeFile()
+            }
         }
     }
 
@@ -46,6 +79,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         pinItem.target = self
         menu.addItem(pinItem)
+
+        // 登录自启动开关
+        let launchItem = NSMenuItem(
+            title: "开机自启动",
+            action: #selector(toggleAutoLaunch), keyEquivalent: ""
+        )
+        launchItem.target = self
+        launchItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        menu.addItem(launchItem)
 
         // 自定义 Dock 应用：列出本机已安装 App，勾选即固定
         let custom = NSMenuItem(title: "自定义 Dock 应用…", action: nil, keyEquivalent: "")
@@ -104,6 +146,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let id = sender.representedObject as? String else { return }
         model.togglePin(id)
         controller.refresh()
+    }
+
+    @objc private func toggleAutoLaunch() {
+        setAutoLaunch(SMAppService.mainApp.status != .enabled)
     }
 
     // MARK: - 事件监听

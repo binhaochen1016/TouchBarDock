@@ -27,13 +27,10 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
         return bar
     }
 
-    /// 显示 Dock 并隐藏系统 Control Strip（占满整条，程序坞体验）。
+    /// 显示 Dock。保留系统 Control Strip（音量/亮度等），Dock 占用其余区域，两者共存。
     func present() {
         guard TouchBarPrivateAPI.hasTouchBarSupport() else { return }
         TouchBarPrivateAPI.hideCloseBoxWhenFrontMost()
-        TouchBarPrivateAPI.setControlStripPresence(
-            forIdentifier: "com.apple.controlstrip:mini", visible: false
-        )
         TouchBarPrivateAPI.presentSystemModal(touchBar)
         isPresented = true
     }

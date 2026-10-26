@@ -9,6 +9,8 @@ Make your MacBook's Touch Bar work like a Dock: always-on app icons, tap to acti
 ## ✨ 功能
 
 - **常驻 Dock** — 使用系统模态 Touch Bar API，跨 App 切换、跨 Space 始终显示
+- **与系统共存** — 保留系统 Control Strip（音量/亮度/焦距等），Dock 占用其余区域
+- **登录自启动** — 首次运行自动注册登录项（SMAppService），菜单栏可开关
 - **运行中 App 实时上下栏** — 启动立即出现、退出立即消失（含运行状态小圆点）
 - **固定常用 App** — 菜单栏「自定义 Dock 应用…」勾选固定，未运行也可点击启动
 - **Dock 式点击行为** — 前台 → 神奇动画最小化；后台/隐藏 → 还原窗口并激活；未运行 → 启动
