@@ -80,6 +80,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pinItem.target = self
         menu.addItem(pinItem)
 
+        // 收起/展开模式切换
+        let collapseItem = NSMenuItem(
+            title: controller.isCollapsed ? "展开为程序坞" : "收起为一个图标",
+            action: #selector(toggleCollapseMode), keyEquivalent: ""
+        )
+        collapseItem.target = self
+        menu.addItem(collapseItem)
+
         // 登录自启动开关
         let launchItem = NSMenuItem(
             title: "开机自启动",
@@ -150,6 +158,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleAutoLaunch() {
         setAutoLaunch(SMAppService.mainApp.status != .enabled)
+    }
+
+    @objc private func toggleCollapseMode() {
+        controller.setCollapsed(!controller.isCollapsed)
     }
 
     // MARK: - 事件监听

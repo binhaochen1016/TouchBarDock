@@ -9,7 +9,8 @@ Make your MacBook's Touch Bar work like a Dock: always-on app icons, tap to acti
 ## ✨ 功能
 
 - **常驻 Dock** — 使用系统模态 Touch Bar API，跨 App 切换、跨 Space 始终显示
-- **与系统共存** — 保留系统 Control Strip（音量/亮度/焦距等），Dock 占用其余区域
+- **与系统共存** — 保留系统 Control Strip（音量/亮度/焦距等），Dock 显示在其左侧，互不影响
+- **收起 / 展开双模式** — 可收起为触控栏上的单个图标（点击展开完整 Dock），菜单栏随时切换，重启保持偏好
 - **登录自启动** — 首次运行自动注册登录项（SMAppService），菜单栏可开关
 - **运行中 App 实时上下栏** — 启动立即出现、退出立即消失（含运行状态小圆点）
 - **固定常用 App** — 菜单栏「自定义 Dock 应用…」勾选固定，未运行也可点击启动
@@ -60,7 +61,7 @@ xattr -dr com.apple.quarantine /Applications/TouchBarDock.app
 ## 🛠️ 技术实现
 
 - Swift + AppKit，SwiftPM 构建，无第三方依赖
-- **常驻显示**：私有 API `+[NSTouchBar presentSystemModalTouchBar:placement:systemTrayItemIdentifier:]`（Pock / MTMR 同款路线），`DFRFoundation` 隐藏系统 Control Strip
+- **常驻显示**：私有 API `+[NSTouchBar presentSystemModalTouchBar:placement:systemTrayItemIdentifier:]`（Pock / MTMR 同款路线），placement 1 与系统 Control Strip 共存；`DFRElementSetControlStripPresenceForIdentifier` 保证控制条可见
 - **动态刷新**：`NSTouchBar` 会缓存条目，应用列表变化时整条重建；切换前台只做幂等重挂（不闪烁）
 - **神奇动画最小化**：辅助功能 API `AXPress` 按下窗口最小化按钮（与真实点击同路径），按钮缺失时退回直接设置 `AXMinimized`，最后退回 `hide()`
 - **诊断日志**：`~/Library/Logs/TouchBarDock.log`

@@ -15,13 +15,14 @@ enum TouchBarPrivateAPI {
     }
 
     /// 以系统模态方式常驻显示 Touch Bar。
-    /// placement 0 = 常驻功能行，跨 App 切换、跨 Space 保持显示。
-    static func presentSystemModal(_ bar: NSTouchBar) {
+    /// placement 1 = 系统控制条（音量/亮度）左侧的位置，与控制条共存（Pock/MTMR 标准值）；
+    /// placement 0 会顶掉控制条区域，导致音量/亮度消失。
+    static func presentSystemModal(_ bar: NSTouchBar, placement: Int = 1) {
         let sel = NSSelectorFromString("presentSystemModalTouchBar:placement:systemTrayItemIdentifier:")
         guard let method = class_getClassMethod(NSTouchBar.self, sel) else { return }
         typealias Fn = @convention(c) (AnyClass, Selector, NSTouchBar, Int, NSString?) -> Void
         let fn = unsafeBitCast(method_getImplementation(method), to: Fn.self)
-        fn(NSTouchBar.self, sel, bar, 0, nil)
+        fn(NSTouchBar.self, sel, bar, placement, nil)
     }
 
     static func dismissSystemModal(_ bar: NSTouchBar) {
@@ -44,5 +45,10 @@ enum TouchBarPrivateAPI {
         guard let p = dfrFunction("DFRElementSetControlStripPresenceForIdentifier") else { return }
         typealias Fn = @convention(c) (NSString, Bool) -> Void
         unsafeBitCast(p, to: Fn.self)(identifier as NSString, visible)
+    }
+
+    /// 显式恢复系统 Control Strip（修复旧版本隐藏后的状态残留）。
+    static func restoreControlStrip() {
+        setControlStripPresence(forIdentifier: "com.apple.controlstrip:mini", visible: true)
     }
 }

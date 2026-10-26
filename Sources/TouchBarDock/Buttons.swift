@@ -54,3 +54,21 @@ final class EscButton: NSButton {
         }
     }
 }
+
+/// 通用图标按钮：用于「收起/展开」等控制类按钮。
+final class SimpleIconButton: NSButton {
+    init(symbol: String, target: AnyObject?, action: Selector, width: CGFloat = 36) {
+        super.init(frame: .zero)
+        image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        imagePosition = .imageOnly
+        contentTintColor = NSColor(white: 0.95, alpha: 1)
+        isBordered = false
+        self.target = target
+        self.action = action
+        translatesAutoresizingMaskIntoConstraints = false
+        widthAnchor.constraint(equalToConstant: width).isActive = true
+        heightAnchor.constraint(equalToConstant: 26).isActive = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+}
