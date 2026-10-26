@@ -14,9 +14,16 @@ cp ".build/release/TouchBarDock" "$APP/Contents/MacOS/TouchBarDock"
 cp "Scripts/Info.plist" "$APP/Contents/Info.plist"
 
 echo "▸ 签名..."
-# 有自签名证书时用：SIGN_IDENTITY="证书名" ./Scripts/make_app.sh
-# 证书固定后辅助功能授权跨重编译有效；默认 ad-hoc 签名每次重编译需重新授权
-SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+# 优先使用固定证书（授权跨重编译有效），无证书时退回 ad-hoc（每次需重新授权辅助功能）
+# 也可显式指定：SIGN_IDENTITY="证书名" ./Scripts/make_app.sh
+if [ -z "${SIGN_IDENTITY:-}" ]; then
+  if security find-identity -v -p codesigning 2>/dev/null | grep -q "TouchBarDockSign"; then
+    SIGN_IDENTITY="TouchBarDockSign"
+  else
+    SIGN_IDENTITY="-"
+  fi
+fi
+echo "  使用签名身份: $SIGN_IDENTITY"
 codesign --force --sign "$SIGN_IDENTITY" "$APP"
 
 echo "✅ 完成：$APP"
