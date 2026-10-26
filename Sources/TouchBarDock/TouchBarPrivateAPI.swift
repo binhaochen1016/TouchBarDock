@@ -42,6 +42,15 @@ enum TouchBarPrivateAPI {
         unsafeBitCast(p, to: Fn.self)(false)
     }
 
+    /// 把条目加入系统托盘区（控制条成员，与音量/亮度同区）。私有类方法，缺失返回 false。
+    static func addSystemTrayItem(_ item: NSTouchBarItem) -> Bool {
+        let sel = NSSelectorFromString("addSystemTrayItem:")
+        guard let method = class_getClassMethod(NSTouchBarItem.self, sel) else { return false }
+        typealias Fn = @convention(c) (AnyClass, Selector, NSTouchBarItem) -> Void
+        unsafeBitCast(method_getImplementation(method), to: Fn.self)(NSTouchBarItem.self, sel, item)
+        return true
+    }
+
     /// 隐藏/恢复系统 Control Strip（触控栏右侧的亮度音量区）。
     static func setControlStripPresence(forIdentifier identifier: String, visible: Bool) {
         guard let p = dfrFunction("DFRElementSetControlStripPresenceForIdentifier") else { return }

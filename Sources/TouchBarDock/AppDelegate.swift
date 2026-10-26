@@ -14,11 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupStatusItem()
         startObserving()
         enableAutoLaunchOnFirstRun()
-        controller.present()
+        // v1.8 系统优先：启动时只注册托盘图标，不展开 Dock（系统触控栏内容保持最高层）
 
-        // 兜底：部分系统转场（锁屏/全屏切换）会收走模态栏，定时重挂（幂等，不重建不闪）
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            self?.controller.rePresent()
+        // 托盘图标 presence 守护：系统偶尔重置控制条，定时把 Dock 图标拉回来
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            self?.controller.ensureTrayPresence()
         }
     }
 
@@ -80,13 +80,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pinItem.target = self
         menu.addItem(pinItem)
 
-        // 收起/展开模式切换
-        let collapseItem = NSMenuItem(
-            title: controller.isCollapsed ? "展开为程序坞" : "收起为一个图标",
-            action: #selector(toggleCollapseMode), keyEquivalent: ""
+        // Dock 显示/隐藏（系统触控栏内容始终优先，Dock 只在被调用时呈现）
+        let dockItem = NSMenuItem(
+            title: controller.isPresented ? "隐藏 Dock" : "显示 Dock",
+            action: #selector(toggleDock), keyEquivalent: ""
         )
-        collapseItem.target = self
-        menu.addItem(collapseItem)
+        dockItem.target = self
+        menu.addItem(dockItem)
 
         // 登录自启动开关
         let launchItem = NSMenuItem(
@@ -160,8 +160,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setAutoLaunch(SMAppService.mainApp.status != .enabled)
     }
 
-    @objc private func toggleCollapseMode() {
-        controller.setCollapsed(!controller.isCollapsed)
+    @objc private func toggleDock() {
+        controller.toggle()
     }
 
     // MARK: - 事件监听
@@ -184,11 +184,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ) { [weak self] _ in
             self?.controller.rePresent()
         })
-        // 解锁屏幕后恢复常驻
+        // 解锁屏幕后确保托盘图标在场（不自动展开 Dock，系统优先）
         DistributedNotificationCenter.default().addObserver(
             forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main
         ) { [weak self] _ in
-            self?.controller.present()
+            self?.controller.ensureTrayPresence()
         }
     }
 }
