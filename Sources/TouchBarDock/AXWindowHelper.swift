@@ -10,8 +10,8 @@ enum AXWindowHelper {
     private static var hasPromptedForTrust = false
     private static let logPath = NSHomeDirectory() + "/Library/Logs/TouchBarDock.log"
 
-    /// 诊断日志：真机上排障用。
-    private static func log(_ message: String) {
+    /// 诊断日志：真机上排障用（模块内共享）。
+    static func log(_ message: String) {
         let stamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         let line = "[\(stamp)] \(message)\n"
         if !FileManager.default.fileExists(atPath: logPath) {

@@ -15,9 +15,10 @@ enum TouchBarPrivateAPI {
     }
 
     /// 以系统模态方式常驻显示 Touch Bar。
-    /// placement 1 = 系统控制条（音量/亮度）左侧的位置，与控制条共存（Pock/MTMR 标准值）；
-    /// placement 0 会顶掉控制条区域，导致音量/亮度消失。
-    static func presentSystemModal(_ bar: NSTouchBar, placement: Int = 1) {
+    /// placement 0 = 与系统 Control Strip（音量/亮度）共享触控栏，控制条保留在右侧（实测结论，
+    /// 见 MediaBar 项目：0 shares the strip with the Control Strip, 1 takes all of it）。
+    /// 注意：placement 在上屏时固定，换 placement 必须先 dismiss 再 present。
+    static func presentSystemModal(_ bar: NSTouchBar, placement: Int = 0) {
         let sel = NSSelectorFromString("presentSystemModalTouchBar:placement:systemTrayItemIdentifier:")
         guard let method = class_getClassMethod(NSTouchBar.self, sel) else { return }
         typealias Fn = @convention(c) (AnyClass, Selector, NSTouchBar, Int, NSString?) -> Void
@@ -50,5 +51,12 @@ enum TouchBarPrivateAPI {
     /// 显式恢复系统 Control Strip（修复旧版本隐藏后的状态残留）。
     static func restoreControlStrip() {
         setControlStripPresence(forIdentifier: "com.apple.controlstrip:mini", visible: true)
+    }
+
+    /// 读取系统控制条当前可见性（诊断用）。nil = 符号缺失。
+    static func controlStripPresence(forIdentifier identifier: String) -> Bool? {
+        guard let p = dfrFunction("DFRElementGetControlStripPresenceForIdentifier") else { return nil }
+        typealias Fn = @convention(c) (NSString) -> Bool
+        return unsafeBitCast(p, to: Fn.self)(identifier as NSString)
     }
 }

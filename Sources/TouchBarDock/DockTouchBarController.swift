@@ -36,14 +36,23 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
         return bar
     }
 
-    /// 显示 Dock（按当前模式）。placement 1 与系统控制条共存，且显式恢复控制条可见。
+    /// 显示 Dock（按当前模式）。placement 0 与系统控制条共存，且显式恢复控制条可见（修复历史残留）。
     func present() {
         guard TouchBarPrivateAPI.hasTouchBarSupport() else { return }
         TouchBarPrivateAPI.hideCloseBoxWhenFrontMost()
+        let before = TouchBarPrivateAPI.controlStripPresence(forIdentifier: "com.apple.controlstrip:mini")
+        TouchBarPrivateAPI.presentSystemModal(touchBar, placement: 0)
         TouchBarPrivateAPI.restoreControlStrip()
-        TouchBarPrivateAPI.presentSystemModal(touchBar, placement: 1)
+        let after = TouchBarPrivateAPI.controlStripPresence(forIdentifier: "com.apple.controlstrip:mini")
         isPresented = true
+        // 只在前几次记录诊断，避免日志刷屏
+        if presentLogCount < 5 {
+            presentLogCount += 1
+            AXWindowHelper.log("present: placement=0, strip presence before=\(before.map(String.init) ?? "符号缺失") after=\(after.map(String.init) ?? "符号缺失")")
+        }
     }
+
+    private var presentLogCount = 0
 
     /// 恢复系统默认 Touch Bar。
     func dismiss() {
