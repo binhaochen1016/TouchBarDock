@@ -1,9 +1,8 @@
 import AppKit
 
-/// Touch Bar 控制器：构建 Dock 栏并以系统模态方式常驻显示。
-/// 支持两种模式：
-/// - 展开（默认）：Esc 补偿 + 应用图标行 + 收起按钮，与系统控制条（音量/亮度）共存
-/// - 收起：触控栏只留一个图标，点它即展开完整 Dock
+/// Touch Bar 控制器：单条 bar + 单容器 item。
+/// 收起/展开、应用增减都只是原地切换容器内容，bar 实例全程唯一、
+/// 只在启动/解锁/兜底时幂等重挂——杜绝「换 bar / 叠加 present」把系统控制条顶掉的问题。
 final class DockTouchBarController: NSObject, NSTouchBarDelegate {
 
     static let shared = DockTouchBarController()
@@ -11,13 +10,15 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
     private let model = AppModel()
     private var touchBar: NSTouchBar!
     private var isPresented = false
-    /// 上次渲染的 App 列表签名；列表没变就不重建，避免触控栏闪烁
+    /// 上次渲染的 App 列表签名；列表没变就不动内容，避免触控栏闪烁
     private var lastSignature: [String] = []
     private static let collapsedKey = "TouchBarDock.collapsed"
 
-    private let escItemID = NSTouchBarItem.Identifier("com.touchbardash.dock.esc")
-    private let dockItemID = NSTouchBarItem.Identifier("com.touchbardash.dock.apps")
-    private let toggleItemID = NSTouchBarItem.Identifier("com.touchbardash.dock.toggle")
+    private static let rowItemID = NSTouchBarItem.Identifier("com.touchbardash.dock.row")
+    private let rowItem = NSCustomTouchBarItem(
+        identifier: NSTouchBarItem.Identifier("com.touchbardash.dock.row")
+    )
+    private let rowStack = NSStackView()
 
     /// 是否处于「收起为图标」模式（菜单栏可切换，重启后保持）。
     private(set) var isCollapsed: Bool
@@ -25,36 +26,26 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
     private override init() {
         isCollapsed = UserDefaults.standard.bool(forKey: Self.collapsedKey)
         super.init()
-        touchBar = makeTouchBar()
+        rowStack.orientation = .horizontal
+        rowStack.spacing = 4
+        rowStack.edgeInsets = NSEdgeInsets(top: 2, left: 6, bottom: 2, right: 4)
+        rowItem.view = rowStack
+
+        touchBar = NSTouchBar()
+        touchBar.delegate = self
+        touchBar.defaultItemIdentifiers = [Self.rowItemID]
+        applyMode()
     }
 
-    /// NSTouchBar 会缓存已创建的条目；要动态增删图标必须整条重建。
-    private func makeTouchBar() -> NSTouchBar {
-        let bar = NSTouchBar()
-        bar.delegate = self
-        bar.defaultItemIdentifiers = isCollapsed ? [toggleItemID] : [escItemID, dockItemID, toggleItemID]
-        return bar
-    }
-
-    /// 显示 Dock（按当前模式）。placement 0 与系统控制条共存，且显式恢复控制条可见（修复历史残留）。
+    /// 显示 Dock。placement 0 与系统控制条（音量/亮度）共享触控条；同一实例幂等重挂。
     func present() {
         guard TouchBarPrivateAPI.hasTouchBarSupport() else { return }
         TouchBarPrivateAPI.hideCloseBoxWhenFrontMost()
-        let before = TouchBarPrivateAPI.controlStripPresence(forIdentifier: "com.apple.controlstrip:mini")
         TouchBarPrivateAPI.presentSystemModal(touchBar, placement: 0)
-        TouchBarPrivateAPI.restoreControlStrip()
-        let after = TouchBarPrivateAPI.controlStripPresence(forIdentifier: "com.apple.controlstrip:mini")
         isPresented = true
-        // 只在前几次记录诊断，避免日志刷屏
-        if presentLogCount < 5 {
-            presentLogCount += 1
-            AXWindowHelper.log("present: placement=0, strip presence before=\(before.map(String.init) ?? "符号缺失") after=\(after.map(String.init) ?? "符号缺失")")
-        }
     }
 
-    private var presentLogCount = 0
-
-    /// 恢复系统默认 Touch Bar。
+    /// 恢复系统默认 Touch Bar（退出时调用）。
     func dismiss() {
         guard isPresented else { return }
         TouchBarPrivateAPI.dismissSystemModal(touchBar)
@@ -66,39 +57,24 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
         isPresented ? dismiss() : present()
     }
 
-    /// 切换「收起为图标 / 展开为程序坞」模式。
-    /// 关键：placement 在 bar 上屏时固定，且在已显示的模态上直接叠加 present 新 bar
-    /// 会把系统控制条顶掉——必须先 dismiss 旧 bar，再 present 新 bar。
+    /// 切换「收起为图标 / 展开为程序坞」：只原地换容器内容，bar 与控制条都不动。
     func setCollapsed(_ collapsed: Bool) {
         guard collapsed != isCollapsed else { return }
         isCollapsed = collapsed
         UserDefaults.standard.set(collapsed, forKey: Self.collapsedKey)
-        let oldBar = touchBar
-        touchBar = makeTouchBar()
-        if isPresented {
-            TouchBarPrivateAPI.dismissSystemModal(oldBar)
-            present()
-            let strip = TouchBarPrivateAPI.controlStripPresence(
-                forIdentifier: "com.apple.controlstrip:mini"
-            ).map(String.init) ?? "符号缺失"
-            AXWindowHelper.log("toggle→\(collapsed ? "收起" : "展开") 后 strip presence=\(strip)")
-        }
+        applyMode()
     }
 
-    /// 应用启动/退出/固定变化后调用：列表真的变了才重建（防闪烁），否则只重挂。
-    /// 重建时同样要先 dismiss 旧 bar 再 present，避免叠加 present 顶掉控制条。
+    /// 应用启动/退出/固定变化后调用：列表真的变了才原地重建内容（不换 bar、不重挂）。
     func refresh() {
         guard isPresented else { return }
         let signature = model.dockApps().map(\.bundleID)
         guard signature != lastSignature else { return }
         lastSignature = signature
-        let oldBar = touchBar
-        touchBar = makeTouchBar()
-        TouchBarPrivateAPI.dismissSystemModal(oldBar)
-        present()
+        applyMode()
     }
 
-    /// 应用切换/兜底重挂：不重建，同一条 bar 幂等重挂不会闪。
+    /// 应用切换/兜底重挂：同一条 bar 幂等重挂，不闪、不动控制条。
     func rePresent() {
         guard isPresented else { return }
         present()
@@ -107,59 +83,35 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
     // MARK: - NSTouchBarDelegate
 
     func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
-        switch identifier {
-        case escItemID:
-            let item = NSCustomTouchBarItem(identifier: identifier)
-            item.view = EscButton()
-            return item
-        case dockItemID:
-            let item = NSCustomTouchBarItem(identifier: identifier)
-            item.view = makeAppsView()
-            return item
-        case toggleItemID:
-            let item = NSCustomTouchBarItem(identifier: identifier)
-            item.view = makeToggleView()
-            return item
-        default:
-            return nil
-        }
+        rowItem
     }
 
-    // MARK: - Private
+    // MARK: - 内容构建（原地替换，不换 bar）
 
-    private func makeAppsView() -> NSView {
-        let apps = model.dockApps()
-        let buttons = apps.map { app -> AppIconButton in
-            let button = AppIconButton(app: app, target: self, action: #selector(appTapped(_:)))
-            button.isEnabled = true
-            return button
+    private func applyMode() {
+        for view in rowStack.arrangedSubviews {
+            view.removeFromSuperview()
         }
-        let stack = NSStackView(views: buttons)
-        stack.orientation = .horizontal
-        stack.spacing = 4
-        stack.edgeInsets = NSEdgeInsets(top: 2, left: 6, bottom: 2, right: 2)
-        return stack
-    }
-
-    /// 展开态：右侧收起按钮（挤进图标区尾部）；收起态：单独一个 Dock 图标。
-    private func makeToggleView() -> NSView {
         if isCollapsed {
             let icon = SimpleIconButton(
                 symbol: "square.grid.2x2.fill",
                 target: self, action: #selector(toggleButtonTapped), width: 44
             )
             icon.toolTip = "展开 TouchBarDock"
-            let stack = NSStackView(views: [icon])
-            stack.orientation = .horizontal
-            stack.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 2, right: 8)
-            return stack
+            rowStack.addView(icon, in: .leading)
         } else {
+            rowStack.addView(EscButton(), in: .leading)
+            for app in model.dockApps() {
+                let button = AppIconButton(app: app, target: self, action: #selector(appTapped(_:)))
+                button.isEnabled = true
+                rowStack.addView(button, in: .leading)
+            }
             let chevron = SimpleIconButton(
                 symbol: "chevron.compact.right",
                 target: self, action: #selector(toggleButtonTapped), width: 24
             )
             chevron.toolTip = "收起为一个图标"
-            return chevron
+            rowStack.addView(chevron, in: .leading)
         }
     }
 
