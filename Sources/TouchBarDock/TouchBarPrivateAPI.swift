@@ -26,7 +26,8 @@ enum TouchBarPrivateAPI {
         fn(NSTouchBar.self, sel, bar, placement, nil)
     }
 
-    static func dismissSystemModal(_ bar: NSTouchBar) {
+    static func dismissSystemModal(_ bar: NSTouchBar?) {
+        guard let bar else { return }
         let sel = NSSelectorFromString("dismissSystemModalTouchBar:")
         guard let method = class_getClassMethod(NSTouchBar.self, sel) else { return }
         typealias Fn = @convention(c) (AnyClass, Selector, NSTouchBar) -> Void

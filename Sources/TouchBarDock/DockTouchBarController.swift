@@ -67,21 +67,34 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
     }
 
     /// 切换「收起为图标 / 展开为程序坞」模式。
+    /// 关键：placement 在 bar 上屏时固定，且在已显示的模态上直接叠加 present 新 bar
+    /// 会把系统控制条顶掉——必须先 dismiss 旧 bar，再 present 新 bar。
     func setCollapsed(_ collapsed: Bool) {
         guard collapsed != isCollapsed else { return }
         isCollapsed = collapsed
         UserDefaults.standard.set(collapsed, forKey: Self.collapsedKey)
+        let oldBar = touchBar
         touchBar = makeTouchBar()
-        if isPresented { present() }
+        if isPresented {
+            TouchBarPrivateAPI.dismissSystemModal(oldBar)
+            present()
+            let strip = TouchBarPrivateAPI.controlStripPresence(
+                forIdentifier: "com.apple.controlstrip:mini"
+            ).map(String.init) ?? "符号缺失"
+            AXWindowHelper.log("toggle→\(collapsed ? "收起" : "展开") 后 strip presence=\(strip)")
+        }
     }
 
     /// 应用启动/退出/固定变化后调用：列表真的变了才重建（防闪烁），否则只重挂。
+    /// 重建时同样要先 dismiss 旧 bar 再 present，避免叠加 present 顶掉控制条。
     func refresh() {
         guard isPresented else { return }
         let signature = model.dockApps().map(\.bundleID)
         guard signature != lastSignature else { return }
         lastSignature = signature
+        let oldBar = touchBar
         touchBar = makeTouchBar()
+        TouchBarPrivateAPI.dismissSystemModal(oldBar)
         present()
     }
 
