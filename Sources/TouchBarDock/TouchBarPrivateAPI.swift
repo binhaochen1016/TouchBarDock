@@ -14,16 +14,26 @@ enum TouchBarPrivateAPI {
         return dlsym(handle, name)
     }
 
-    /// 以系统模态方式常驻显示 Touch Bar。
-    /// placement 0 = 与系统 Control Strip（音量/亮度）共享触控栏，控制条保留在右侧（实测结论，
-    /// 见 MediaBar 项目：0 shares the strip with the Control Strip, 1 takes all of it）。
-    /// 注意：placement 在上屏时固定，换 placement 必须先 dismiss 再 present。
-    static func presentSystemModal(_ bar: NSTouchBar, placement: Int = 0) {
+    /// 以系统模态方式常驻显示 Touch Bar（MTMR 同款用法）。
+    /// - placement 0：与系统 mini 控制条共享触控条（控制条保留在右侧）
+    /// - trayItemIdentifier：模态栏锚定的托盘图标 id（关键！系统靠它管理
+    ///   用户展开控制条时的层级切换，传 nil 会导致系统状态错乱）
+    static func presentSystemModal(_ bar: NSTouchBar, placement: Int = 0, trayItemIdentifier: String? = nil) {
         let sel = NSSelectorFromString("presentSystemModalTouchBar:placement:systemTrayItemIdentifier:")
         guard let method = class_getClassMethod(NSTouchBar.self, sel) else { return }
         typealias Fn = @convention(c) (AnyClass, Selector, NSTouchBar, Int, NSString?) -> Void
         let fn = unsafeBitCast(method_getImplementation(method), to: Fn.self)
-        fn(NSTouchBar.self, sel, bar, placement, nil)
+        fn(NSTouchBar.self, sel, bar, placement, trayItemIdentifier as NSString?)
+    }
+
+    /// 最小化模态栏（收回到托盘图标，保持系统会话）——收起的正确姿势。
+    /// 不要用 dismissSystemModal 拆除：那会搅乱控制条状态（MTMR 用 minimize）。
+    static func minimizeSystemModal(_ bar: NSTouchBar) {
+        let sel = NSSelectorFromString("minimizeSystemModalTouchBar:")
+        guard let method = class_getClassMethod(NSTouchBar.self, sel) else { return }
+        typealias Fn = @convention(c) (AnyClass, Selector, NSTouchBar) -> Void
+        let fn = unsafeBitCast(method_getImplementation(method), to: Fn.self)
+        fn(NSTouchBar.self, sel, bar)
     }
 
     static func dismissSystemModal(_ bar: NSTouchBar?) {

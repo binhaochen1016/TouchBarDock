@@ -46,20 +46,25 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
         )
     }
 
-    /// 模态展开 Dock 行（placement 0，与系统 mini 控制条共存）。
+    /// 模态展开 Dock 行（placement 0 与系统 mini 控制条共存；
+    /// 模态栏锚定到托盘图标——MTMR 同款关键参数，系统据此正确管理展开/收起层级）。
     func present() {
         guard TouchBarPrivateAPI.hasTouchBarSupport() else { return }
         buildRow()
         TouchBarPrivateAPI.hideCloseBoxWhenFrontMost()
-        TouchBarPrivateAPI.presentSystemModal(touchBar, placement: 0)
+        TouchBarPrivateAPI.presentSystemModal(
+            touchBar, placement: 0, trayItemIdentifier: Self.trayItemID
+        )
+        TouchBarPrivateAPI.setControlStripPresence(
+            forIdentifier: Self.trayItemID, visible: true
+        )
         isPresented = true
     }
 
-    /// 收起 Dock，触控栏完全还给系统（退出应用时也会调用）。
+    /// 收起 Dock：最小化到托盘图标（保持系统会话，不拆除模态栏）。
     func dismiss() {
         guard isPresented else { return }
-        TouchBarPrivateAPI.dismissSystemModal(touchBar)
-        TouchBarPrivateAPI.restoreControlStrip()
+        TouchBarPrivateAPI.minimizeSystemModal(touchBar)
         isPresented = false
     }
 
@@ -76,7 +81,7 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
         buildRow()
     }
 
-    /// 屏幕解锁后恢复常驻（同实例幂等重挂）。
+    /// 屏幕解锁后恢复常驻（同实例幂等重挂，MTMR 亦如此）。
     func rePresent() {
         guard isPresented else { return }
         present()
