@@ -1,9 +1,10 @@
 import AppKit
 
-/// Touch Bar 控制器（v1.8 系统优先架构）：
-/// - 系统触控栏（App Controls + 控制条）永远是最高层，本应用绝不常驻占用
-/// - Dock 常驻为控制条里的一个图标（系统托盘成员，与音量/亮度同区）
-/// - 点击图标 → 模态展开 Dock 行（placement 0，与控制条共存）；点 › 或再点图标 → 收起还给系统
+/// Touch Bar 控制器（v1.9 系统优先 + Dock 常驻）：
+/// - 启动即模态常驻（placement 0）：左侧 Dock 行，右侧系统 mini 控制条，共存
+/// - 用户点控制条箭头展开完整控制条时，TouchBarServer 自动隐藏 App 区域（系统优先），
+///   收起后自动恢复——本应用运行期不做任何重挂/恢复调用，绝不干扰系统状态
+/// - 控制条里保留 Dock 托盘图标：点击切换展开/收起，也是状态异常时的兜底入口
 final class DockTouchBarController: NSObject, NSTouchBarDelegate {
 
     static let shared = DockTouchBarController()
@@ -13,7 +14,6 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
     /// 上次渲染的 App 列表签名；列表没变就不动内容，避免触控栏闪烁
     private var lastSignature: [String] = []
 
-    private static let rowItemID = NSTouchBarItem.Identifier("com.touchbardash.dock.row")
     private static let trayItemID = "com.touchbardash.dock.tray"
 
     private let rowItem = NSCustomTouchBarItem(
@@ -24,7 +24,7 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
         identifier: NSTouchBarItem.Identifier("com.touchbardash.dock.tray")
     )
 
-    /// 模态 Dock 行是否已展开（收起态 = 触控栏只有托盘图标，系统内容全量可见）。
+    /// 模态 Dock 行是否已展开。
     private(set) var isPresented = false
 
     private override init() {
@@ -36,9 +36,9 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
 
         touchBar = NSTouchBar()
         touchBar.delegate = self
-        touchBar.defaultItemIdentifiers = [Self.rowItemID]
+        touchBar.defaultItemIdentifiers = [rowItem.identifier]
 
-        // 托盘图标：Dock 的常驻入口（控制条成员）
+        // 托盘图标：控制条成员，也是 Dock 的展开/收起入口和兜底恢复入口
         trayItem.view = makeTrayIcon()
         guard TouchBarPrivateAPI.addSystemTrayItem(trayItem) else { return }
         TouchBarPrivateAPI.setControlStripPresence(
@@ -46,7 +46,7 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
         )
     }
 
-    /// 模态展开 Dock 行。
+    /// 模态展开 Dock 行（placement 0，与系统 mini 控制条共存）。
     func present() {
         guard TouchBarPrivateAPI.hasTouchBarSupport() else { return }
         buildRow()
@@ -55,10 +55,11 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
         isPresented = true
     }
 
-    /// 收起 Dock，触控栏完全还给系统。
+    /// 收起 Dock，触控栏完全还给系统（退出应用时也会调用）。
     func dismiss() {
         guard isPresented else { return }
         TouchBarPrivateAPI.dismissSystemModal(touchBar)
+        TouchBarPrivateAPI.restoreControlStrip()
         isPresented = false
     }
 
@@ -75,7 +76,7 @@ final class DockTouchBarController: NSObject, NSTouchBarDelegate {
         buildRow()
     }
 
-    /// 应用切换时幂等重挂（Dock 展开中才需要；同实例重挂不闪、不动控制条）。
+    /// 屏幕解锁后恢复常驻（同实例幂等重挂）。
     func rePresent() {
         guard isPresented else { return }
         present()

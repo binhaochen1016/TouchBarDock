@@ -14,9 +14,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupStatusItem()
         startObserving()
         enableAutoLaunchOnFirstRun()
-        // v1.8 系统优先：启动时只注册托盘图标，不展开 Dock（系统触控栏内容保持最高层）
+        // v1.9：Dock 常驻（placement 0 与系统 mini 控制条共存）；
+        // 系统展开控制条时由 TouchBarServer 自动接管层级，本应用运行期零干扰
 
-        // 托盘图标 presence 守护：系统偶尔重置控制条，定时把 Dock 图标拉回来
+        // 托盘图标 presence 守护（只守护我们自己的图标，不碰系统 mini 控制条）
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             self?.controller.ensureTrayPresence()
         }
@@ -168,7 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func startObserving() {
         let center = NSWorkspace.shared.notificationCenter
-        // 启动/退出 → 内容可能变化 → 签名比对后按需重建
+        // 启动/退出 → 内容可能变化 → 签名比对后按需原地重建（不换 bar、不重挂）
         let contentNames: [NSNotification.Name] = [
             NSWorkspace.didLaunchApplicationNotification,
             NSWorkspace.didTerminateApplicationNotification,
@@ -178,16 +179,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.controller.refresh()
             })
         }
-        // 切换前台 App → 内容不变，只做幂等重挂（不闪）
-        observers.append(center.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.controller.rePresent()
-        })
-        // 解锁屏幕后确保托盘图标在场（不自动展开 Dock，系统优先）
+        // 解锁屏幕后恢复常驻 + 守护托盘图标。
+        // 切换前台 App 不做任何事：模态栏跨 App 持续有效，运行期零干扰，让系统自由展开/收起控制条
         DistributedNotificationCenter.default().addObserver(
             forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main
         ) { [weak self] _ in
+            self?.controller.rePresent()
             self?.controller.ensureTrayPresence()
         }
     }
